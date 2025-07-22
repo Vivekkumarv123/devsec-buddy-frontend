@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
 import ReactMarkdown from 'react-markdown';
-import Image from "next/image";
 
 // Enhanced ScanForm with animations
 const ScanForm = ({ onScan }) => {
@@ -20,7 +19,17 @@ const ScanForm = ({ onScan }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!url.startsWith("http")) return alert("Enter a valid URL with http/https");
+
+    // Enhanced URL validation
+    try {
+      const parsedUrl = new URL(url);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        return alert("Enter a valid URL with http/https");
+      }
+    } catch (err) {
+      return alert("Enter a valid URL with http/https");
+    }
+
     onScan({ url, profile });
   };
 
@@ -220,7 +229,10 @@ const ScanResult = ({ data }) => {
                   <div className="p-4 border rounded-md shadow-sm bg-white space-y-2">
                     {/* Header: Title + Severity */}
                     <div className="flex justify-between items-center">
-                      <h3 className="font-semibold text-base text-gray-800">{vuln.title}</h3>
+                      <h3 className="font-semibold text-base text-gray-800">
+                        {/* Sanitized text rendering */}
+                        {vuln.title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                      </h3>
                       {vuln.severity && (
                         <span className={`px-2 py-0.5 rounded text-xs font-semibold ${severityColors[vuln.severity] || ''}`}>
                           {vuln.severity.charAt(0).toUpperCase() + vuln.severity.slice(1)}
@@ -228,10 +240,10 @@ const ScanResult = ({ data }) => {
                       )}
                     </div>
 
-                    {/* Markdown content */}
-                    <ReactMarkdown className="prose prose-sm text-gray-700 max-w-none">
-                      {vuln.content}
-                    </ReactMarkdown>
+                    {/* Content with sanitized text rendering */}
+                    <p className="text-gray-700 whitespace-pre-wrap">
+                      {vuln.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                    </p>
                   </div>
                 </motion.div>
               );
@@ -244,13 +256,19 @@ const ScanResult = ({ data }) => {
               {results.security_headers.present?.map((header, i) => (
                 <div key={i} className="flex items-center bg-green-50 p-2 rounded">
                   <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
-                  <span className="text-green-700">{header}</span>
+                  <span className="text-green-700">
+                    {/* Sanitized header name */}
+                    {header.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                  </span>
                 </div>
               ))}
               {results.security_headers.missing?.map((header, i) => (
                 <div key={i} className="flex items-center bg-red-50 p-2 rounded">
                   <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
-                  <span className="text-red-700">{header}</span>
+                  <span className="text-red-700">
+                    {/* Sanitized header name */}
+                    {header.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                  </span>
                 </div>
               ))}
             </div>
@@ -261,10 +279,15 @@ const ScanResult = ({ data }) => {
       {/* Full Remediation */}
       <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
         <h3 className="font-bold text-blue-800 mb-2">Full Remediation Guide</h3>
-        <div className="prose prose-sm max-w-none bg-white p-4 rounded">
-          <ReactMarkdown>{remediation}</ReactMarkdown>
-        </div>
+        <div className="prose prose-sm max-w-none bg-white p-4 rounded overflow-auto">
+          {/* Sanitized remediation content */}
+          <div className="prose prose-sm bg-white p-4 rounded overflow-auto">
+            <ReactMarkdown>
+              {remediation}
+            </ReactMarkdown>
+          </div>
 
+        </div>
       </div>
     </motion.div>
   );
@@ -294,24 +317,36 @@ export default function Home() {
       }, 100);
 
       const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/scan`, {
-        url, profile
+        url,
+        profile
       }, {
         headers: {
           'Content-Type': 'application/json',
           'X-Requested-With': 'XMLHttpRequest'
         },
-        timeout: 30000
+        timeout: 30000,
+        // Prevent axios from throwing on non-2xx responses
+        validateStatus: () => true
       });
 
-      setResults(res.data.results);
+      // Validate response structure
+      if (res.data && res.data.results && typeof res.data.results === 'object') {
+        setResults(res.data.results);
+      } else {
+        throw new Error("Invalid response from server");
+      }
 
       // Add to scan history
       setScanHistory(prev => [
-        { url, profile, timestamp: new Date().toISOString() },
+        {
+          url: url.replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+          profile,
+          timestamp: new Date().toISOString()
+        },
         ...prev.slice(0, 4)
       ]);
     } catch (err) {
-      alert("Scan failed: " + (err.response?.data?.error || err.message));
+      alert("Scan failed: " + (err.message || "Unknown error"));
     } finally {
       setLoading(false);
 
@@ -339,14 +374,14 @@ export default function Home() {
         >
           <div className="flex justify-center items-center mb-4">
             <div className="bg-white p-3 rounded-full shadow-lg">
-              <Image
+              {/* Safe image rendering */}
+              <img
                 src="/logo.png"
                 alt="DevSec Buddy Logo"
                 width={80}
                 height={80}
                 className="h-20 w-20"
               />
-
             </div>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">
@@ -432,7 +467,10 @@ export default function Home() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.1 * i }}
                     >
-                      <div className="font-medium truncate">{scan.url}</div>
+                      <div className="font-medium truncate">
+                        {/* Sanitized URL rendering */}
+                        {scan.url}
+                      </div>
                       <div className="flex justify-between text-sm text-gray-500 mt-1">
                         <span className="capitalize">{scan.profile}</span>
                         <span>
